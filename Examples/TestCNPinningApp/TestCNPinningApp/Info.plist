@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CNPinningManager</key>
+	<dict>
+		<key>PinnedDomains</key>
+		<dict>
+			<key>www.austinsoft.com</key>
+			<dict>
+				<key>chainSet</key>
+				<array>
+					<array>
+						<dict>
+							<key>type</key>
+							<string>prefixWithNumber</string>
+							<key>value</key>
+							<string>ISRG Root X</string>
+						</dict>
+						<dict>
+							<key>type</key>
+							<string>prefixWithNumber</string>
+							<key>value</key>
+							<string>R</string>
+						</dict>
+						<dict>
+							<key>type</key>
+							<string>suffix</string>
+							<key>value</key>
+							<string>austinsoft.com</string>
+						</dict>
+					</array>
+				</array>
+				<key>includesSubdomains</key>
+				<false/>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>
