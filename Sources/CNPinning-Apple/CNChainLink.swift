@@ -29,9 +29,12 @@ public struct CNChainLink: Hashable, Equatable, Sendable, CustomStringConvertibl
 		- value: the value to match
 	 */
 
-    public init(_ linkType: LinkType, _ value: String) {
+    public init(_ linkType: LinkType, _ value: String) throws {
         self.linkType = linkType
         self.value = value
+		if value.isEmpty {
+			throw CNParseError.missingValue("\(linkType.rawValue) value")
+		}
     }
 
     init(entry: [String: Any]) throws {
@@ -51,6 +54,9 @@ public struct CNChainLink: Hashable, Equatable, Sendable, CustomStringConvertibl
 #endif
             linkType = .exact
         }
+		if value.isEmpty {
+			throw CNParseError.missingValue("\(linkType.rawValue) value")
+		}
     }
 
     func matches(_ commonName: String) -> Bool {

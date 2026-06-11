@@ -75,33 +75,97 @@ struct CNChainLinkTests {
         }
     }
 
-    @Test func cnChainLinkExact() {
-        let link = CNChainLink(.exact, "example.com")
+    @Test func cnChainLinkExact() throws {
+        let link = try CNChainLink(.exact, "example.com")
         #expect(link.matches("example.com"))
         #expect(!link.matches("not example.com"))
     }
 
-    @Test func cnChainLinkPrefix() {
-        let link = CNChainLink(.prefix, "DigiCert C")
+    @Test func cnChainLinkPrefix() throws {
+        let link = try CNChainLink(.prefix, "DigiCert C")
         #expect(link.matches("DigiCert C4"))
         #expect(!link.matches("DigiCert "))
     }
 
-    @Test func cnChainLinkPrefixWithNumber() {
-        let link = CNChainLink(.prefixWithNumber, "DigiCert C")
+    @Test func cnChainLinkPrefixWithNumber() throws {
+        let link = try CNChainLink(.prefixWithNumber, "DigiCert C")
         #expect(link.matches("DigiCert C4"))
         #expect(!link.matches("DigiCert CA"))
         #expect(!link.matches("DigiCert"))
     }
 
-    @Test func cnChainLinkSuffix() {
-        let link = CNChainLink(.suffix, ".example.com")
+    @Test func cnChainLinkSuffix() throws {
+        let link = try CNChainLink(.suffix, ".example.com")
         #expect(link.matches("www.example.com"))
         #expect(!link.matches("example.com"))
     }
 
-    @Test func cnChainLinkDescription() {
-        let link = CNChainLink(.exact, "example.com")
+    @Test func cnChainLinkDescription() throws {
+        let link = try CNChainLink(.exact, "example.com")
         #expect(link.description == "CNChainLink(.exact, \"example.com\")")
     }
+
+	@Test func cnChainLinkExactEmptyValue() throws {
+		#expect(throws: CNParseError.missingValue("exact value")) {
+			_ = try CNChainLink(.exact, "")
+		}
+	}
+
+	@Test func cnChainLinkPrefixEmptyValue() throws {
+		#expect(throws: CNParseError.missingValue("prefix value")) {
+			_ = try CNChainLink(.prefix, "")
+		}
+	}
+
+	@Test func cnChainLinkPrefixWithNumbersEmptyValue() throws {
+		#expect(throws: CNParseError.missingValue("prefixWithNumber value")) {
+			_ = try CNChainLink(.prefixWithNumber, "")
+		}
+	}
+
+	@Test func cnChainLinkSuffixEmptyValue() throws {
+		#expect(throws: CNParseError.missingValue("suffix value")) {
+			_ = try CNChainLink(.suffix, "")
+		}
+	}
+
+	@Test func cnChainLinkParseExactEmptyValue() throws {
+		let linkDict: [String: Any] = [
+			"type": "exact",
+			"value": "",
+		]
+		#expect(throws: CNParseError.missingValue("exact value")) {
+			_ = try CNChainLink(entry: linkDict)
+		}
+	}
+
+	@Test func cnChainLinkParsePrefixEmptyValue() throws {
+		let linkDict: [String: Any] = [
+			"type": "prefix",
+			"value": "",
+		]
+		#expect(throws: CNParseError.missingValue("prefix value")) {
+			_ = try CNChainLink(entry: linkDict)
+		}
+	}
+
+	@Test func cnChainLinkParsePrefixWithNumbersEmptyValue() throws {
+		let linkDict: [String: Any] = [
+			"type": "prefixWithNumber",
+			"value": "",
+		]
+		#expect(throws: CNParseError.missingValue("prefixWithNumber value")) {
+			_ = try CNChainLink(entry: linkDict)
+		}
+	}
+
+	@Test func cnChainLinkParseSuffixEmptyValue() throws {
+		let linkDict: [String: Any] = [
+			"type": "suffix",
+			"value": "",
+		]
+		#expect(throws: CNParseError.missingValue("suffix value")) {
+			_ = try CNChainLink(entry: linkDict)
+		}
+	}
 }

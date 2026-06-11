@@ -50,7 +50,7 @@ anything it cannot verify *for the specified configuration* is rejected.
    the server's certificate chain.
 3. `CNPinningManager` extracts the Common Name from each certificate, then checks
    whether the presented chain matches **all** the links of **any** chain you
-   defined for that host.
+   defined for that host, as specified within each link's configuration.
    - The number of certificates presented must equal the number of links in a
      chain. Every certificate is checked — including the leaf.
 4. If a chain matches → the connection proceeds with default handling. If it does
@@ -60,6 +60,30 @@ anything it cannot verify *for the specified configuration* is rejected.
 > humans read them, but `URLSession` delivers the chain leaf → root. The library
 > reverses your definition internally so the two line up. You always write
 > root → leaf.
+
+### Development note
+
+`URLSession` caches responses on-device via the `urlCache` on its `URLSessionConfiguration`.
+A cached response is returned without a new TLS handshake — so no challenge
+reaches the delegate, and no pinning occurs. Building your `URLSession`
+with an `ephemeral` `URLSessionConfiguration`, at least during development,
+avoids this and will save you uncounted time tracking down why a host isn't being pinned.
+
+### Unpinned hosts
+
+CNPinning applies pinning only to hosts you explicitly configure. Connections to
+hosts without a configured pin set proceed with the platform's normal TLS
+validation — they are **allowed**, not blocked. This matches the behavior of
+Apple's and Android's built-in pinning and standard pinning libraries: pinning
+*adds* constraints to the hosts you choose to pin; it does **not** restrict connections
+to only-pinned hosts.
+
+A consequence to be aware of: if a host you intend to pin is misconfigured — a
+hostname typo, a configuration that doesn't load, a pin set not applied to that
+host — connections to it are *allowed* (unpinned), not blocked. Pinning misconfigurations
+fail open. Verify that your pin sets are actually applied to the hosts you intend to
+protect; do not assume a host is pinned without confirming its configuration is
+loaded and matched.
 
 ---
 
@@ -88,7 +112,7 @@ the **CNPinning-Apple** library product to your app target.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/austinsoftcom/CNPinning-Apple.git", from: "1.0.0")
+    .package(url: "https://github.com/austinsoftcom/CNPinning-Apple.git", from: "1.1.0")
 ],
 targets: [
     .target(
@@ -248,7 +272,7 @@ Example pinning `captive.apple.com` and `austinsoft.com`:
 Notes:
 - `chainSet` is a **set of chains, which are arrays**. List more than one chain
   when a host may be served from different certificate authorities (e.g. during
-  a CA migration) — any chain matching is enough.
+  a CA migration) — any **chain** matching the trust chain is enough.
 - `includesSubdomains` is **required** in Info.plist (omitting it throws
   `CNParseError.missingValue("includesSubdomains")`).
 - If a link omits `type`, it defaults to `exact` (and a warning is logged to
@@ -576,7 +600,7 @@ complete threat model and the reasoning behind these trade-offs.
 The library abstracts every system call behind an internal `OSCalls` struct
 (fetching the Info.plist, the server trust, the certificate chain, and each
 Common Name). This makes the matching logic fully testable with injected,
-deterministic data — see `Tests/CNPinning-Apple-Tests`, which exercises parsing,
+deterministic data — see the project's `Tests` directory, which exercises parsing,
 each match type, subdomain resolution, fail-secure paths, and live end-to-end
 pinning against a real host.
 

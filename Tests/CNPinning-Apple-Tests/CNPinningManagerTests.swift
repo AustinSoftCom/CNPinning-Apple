@@ -52,7 +52,6 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerInit() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -88,7 +87,7 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerConvinienceInitNoParams() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                [:]
+                ["CFBundleName": "test"]
             },
             getServerTrust: { _ in
                 #expect(Bool(false))
@@ -124,6 +123,80 @@ struct CNPinningManagerTests {
         )
         #expect(pinningManager.description == "CNPinningManager([\"www.apple.com\": CNConfiguration(includesSubdomains: false, [CNChain([CNChainLink(.prefixWithNumber, \"DigiCert C\"), CNChainLink(.exact, \"www.apple.com\")])])])")
     }
+
+	@Test func cnPinningManagerConveniceInitWithParamsConflicts() throws {
+		let osCalls = OSCalls(
+			getInfoDictionary: {
+				[
+					"NSAppTransportSecurity": [
+						"NSPinnedDomains": [
+							"captive.apple.com": [
+								"NSIncludesSubdomains": false,
+								"NSPinnedCAIdentities": [
+									[
+										"SPKI-SHA256-BASE64": "uUwZgwDOxcBXrQcntwu+kYFpkiVkOaezL0WYEZ3anJc=",
+									],
+								],
+								"NSPinnedLeafIdentities": [
+									[
+										"SPKI-SHA256-BASE64": "UKUeIlCGrdMx5Me88sffGGn75bDYCUtr2EIrv3aLW5E=",
+									],
+								],
+							],
+						],
+					],
+					"CNPinningManager": [
+						"PinnedDomains": [
+							"www.apple.com": [
+								"includesSubdomains": false,
+								"chainSet": [
+									[
+										[
+											"type": "prefixWithNumber",
+											"value": "DigiCert C",
+										],
+										[
+											"type": "exact",
+											"value": "www.apple.com",
+										],
+									],
+								],
+							],
+						],
+					],
+				]
+			},
+			getServerTrust: { _ in
+				#expect(Bool(false))
+				return nil
+			},
+			getCertificateChain: { _ in
+				#expect(Bool(false))
+				return nil
+			},
+			getCommonName: { _ in
+				#expect(Bool(false))
+				return nil
+			}
+		)
+
+		#expect(throws: CNParseError.atsConflict) {
+			_ = try CNPinningManager(
+				configuration: [
+					"www.apple.com": .init(
+						includesSubdomains: false,
+						[
+							.init([
+								.init(.prefixWithNumber, "DigiCert C"),
+								.init(.exact, "www.apple.com"),
+							]),
+						]
+					),
+				],
+				osCalls: osCalls
+			)
+		}
+	}
 
     @Test func cnPinningManagerConvenienceInitConflictsATS() throws {
         let osCalls = OSCalls(
@@ -166,7 +239,7 @@ struct CNPinningManagerTests {
                         ],
                     ],
                 ]
-            },
+			},
             getServerTrust: { _ in
                 #expect(Bool(false))
                 return nil
@@ -256,8 +329,7 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerSupportExplicitSubdomainsAndDomainOrder() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
-                return nil
+				["CFBundleName": "test"]
             },
             getServerTrust: { _ in
                 #expect(Bool(false))
@@ -273,27 +345,29 @@ struct CNPinningManagerTests {
             }
         )
         let pinningManager = try CNPinningManager(
-            descriptionOrder: ["www.apple.com", "apple.com"],
-            configuration: [
-                "apple.com": .init(
-                    includesSubdomains: true,
-                    [
-                        .init([
-                            .init(.prefixWithNumber, "DigiCert C"),
-                            .init(.suffix, ".apple.com"),
-                        ]),
-                    ]
-                ),
-                "www.apple.com": .init(
-                    includesSubdomains: false,
-                    [
-                        .init([
-                            .init(.prefixWithNumber, "DigiCert C"),
-                            .init(.exact, "www.apple.com"),
-                        ]),
-                    ]
-                ),
-            ],
+			initType: .configuration(
+				descriptionOrder: ["www.apple.com", "apple.com"],
+				configuration: [
+					"apple.com": .init(
+						includesSubdomains: true,
+						[
+							.init([
+								.init(.prefixWithNumber, "DigiCert C"),
+								.init(.suffix, ".apple.com"),
+							]),
+						]
+					),
+					"www.apple.com": .init(
+						includesSubdomains: false,
+						[
+							.init([
+								.init(.prefixWithNumber, "DigiCert C"),
+								.init(.exact, "www.apple.com"),
+							]),
+						]
+					),
+				]
+			),
             osCalls: osCalls
         )
         #expect(pinningManager.description == "CNPinningManager([\"www.apple.com\", \"apple.com\"], [\"www.apple.com\": CNConfiguration(includesSubdomains: false, [CNChain([CNChainLink(.prefixWithNumber, \"DigiCert C\"), CNChainLink(.exact, \"www.apple.com\")])]), \"apple.com\": CNConfiguration(includesSubdomains: true, [CNChain([CNChainLink(.prefixWithNumber, \"DigiCert C\"), CNChainLink(.suffix, \".apple.com\")])])])")
@@ -379,7 +453,6 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerGetConfigurationExact() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -433,7 +506,6 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerGetSubdomainConfiguration() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -487,7 +559,6 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerGetDomainConfiguration() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -541,7 +612,6 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerGetLongerDomainConfiguration() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -595,7 +665,6 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerNoSortOrder() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -640,8 +709,7 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerSpecifyBadDomainName() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
-                return nil
+				["CFBundleName": "test"]
             },
             getServerTrust: { _ in
                 #expect(Bool(false))
@@ -657,27 +725,29 @@ struct CNPinningManagerTests {
             }
         )
         let pinningManager = try CNPinningManager(
-            descriptionOrder: ["www.apple.com", "apple.com", "example.com"],
-            configuration: [
-                "apple.com": .init(
-                    includesSubdomains: true,
-                    [
-                        .init([
-                            .init(.prefixWithNumber, "DigiCert C"),
-                            .init(.suffix, ".apple.com"),
-                        ]),
-                    ]
-                ),
-                "www.apple.com": .init(
-                    includesSubdomains: false,
-                    [
-                        .init([
-                            .init(.prefixWithNumber, "DigiCert C"),
-                            .init(.exact, "www.apple.com"),
-                        ]),
-                    ]
-                ),
-            ],
+			initType: .configuration(
+				descriptionOrder: ["www.apple.com", "apple.com", "example.com"],
+				configuration: [
+					"apple.com": .init(
+						includesSubdomains: true,
+						[
+							.init([
+								.init(.prefixWithNumber, "DigiCert C"),
+								.init(.suffix, ".apple.com"),
+							]),
+						]
+					),
+					"www.apple.com": .init(
+						includesSubdomains: false,
+						[
+							.init([
+								.init(.prefixWithNumber, "DigiCert C"),
+								.init(.exact, "www.apple.com"),
+							]),
+						]
+					),
+				]
+			),
             osCalls: osCalls
         )
         #expect(pinningManager.description == "CNPinningManager([\"www.apple.com\", \"apple.com\", \"example.com\"], [\"www.apple.com\": CNConfiguration(includesSubdomains: false, [CNChain([CNChainLink(.prefixWithNumber, \"DigiCert C\"), CNChainLink(.exact, \"www.apple.com\")])]), \"apple.com\": CNConfiguration(includesSubdomains: true, [CNChain([CNChainLink(.prefixWithNumber, \"DigiCert C\"), CNChainLink(.suffix, \".apple.com\")])])])")
@@ -686,7 +756,6 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerValidateNotPinned() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -735,7 +804,6 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerAsyncValidateNotPinned() async throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -783,7 +851,6 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerValidatePinnedNoTrust() throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -832,7 +899,6 @@ struct CNPinningManagerTests {
     @Test func cnPinningManagerAsyncValidatePinnedNoTrust() async throws {
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -881,7 +947,6 @@ struct CNPinningManagerTests {
         let testServerTrust = TestServerTrust()
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -946,7 +1011,6 @@ struct CNPinningManagerTests {
         ]
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -1000,7 +1064,6 @@ struct CNPinningManagerTests {
         ]
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -1058,7 +1121,6 @@ struct CNPinningManagerTests {
         ]
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -1117,7 +1179,6 @@ struct CNPinningManagerTests {
         ]
         let osCalls = OSCalls(
             getInfoDictionary: {
-                #expect(Bool(false))
                 return nil
             },
             getServerTrust: { _ in
@@ -1161,4 +1222,47 @@ struct CNPinningManagerTests {
         let challenge = buildAuthenticationChallenge(for: "sub.apple.com")
         #expect(try await pinningManager.validate(challenge: challenge) == (.performDefaultHandling, nil))
     }
+
+	@Test func cnPinningManagerConveniceInitEmptyCNChainLinkValue() throws {
+		let osCalls = OSCalls(
+			getInfoDictionary: {
+				[
+					"CNPinningManager": [
+						"PinnedDomains": [
+							"www.apple.com": [
+								"includesSubdomains": false,
+								"chainSet": [
+									[
+										[
+											"type": "prefixWithNumber",
+											"value": "DigiCert C",
+										],
+										[
+											"type": "exact",
+											"value": "",
+										],
+									],
+								],
+							],
+						],
+					],
+				]
+			},
+			getServerTrust: { _ in
+				#expect(Bool(false))
+				return nil
+			},
+			getCertificateChain: { _ in
+				#expect(Bool(false))
+				return nil
+			},
+			getCommonName: { _ in
+				#expect(Bool(false))
+				return nil
+			}
+		)
+		#expect(throws: CNParseError.missingValue("exact value")) {
+			_ = try CNPinningManager(osCalls: osCalls)
+		}
+	}
 }

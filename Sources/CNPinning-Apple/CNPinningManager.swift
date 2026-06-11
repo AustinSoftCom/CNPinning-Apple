@@ -14,6 +14,11 @@ public final class CNPinningManager: Sendable, CustomStringConvertible {
 	let descriptionOrder: [String]?
 	let osCalls: OSCalls
 
+	enum InitType {
+		case infoPlist
+		case configuration(descriptionOrder: [String]? = nil, configuration: [String: CNConfiguration])
+	}
+
 	/**
 	 Initialize CNPinningManager from your application's Info.plist
 
@@ -22,9 +27,7 @@ public final class CNPinningManager: Sendable, CustomStringConvertible {
 	 result to the main init, which will configure CNPinningManager.
 	 */
 	public convenience init() throws {
-		let osCalls = OSCalls()
-		let (domainOrder, domainConfigurations) = try Self.parseConfigurationDict(osCalls: osCalls)
-		self.init(descriptionOrder: domainOrder, configuration: domainConfigurations, osCalls: osCalls)
+		try self.init(initType: .infoPlist, osCalls: OSCalls())
 	}
 
 	/**
@@ -36,34 +39,59 @@ public final class CNPinningManager: Sendable, CustomStringConvertible {
 	 - Parameters
 	 - configuration: The CNConfiguration to use for this CNPinningManager
 	 */
-	public convenience init(configuration: [String: CNConfiguration]) {
-		let osCalls = OSCalls()
-		self.init(descriptionOrder: nil, configuration: configuration, osCalls: osCalls)
+	public convenience init(configuration: [String: CNConfiguration]) throws {
+		try self.init(initType: .configuration(configuration: configuration), osCalls: OSCalls())
 	}
 
-	convenience init(osCalls: OSCalls) throws {
-		let (domainOrder, domainConfigurations) = try Self.parseConfigurationDict(osCalls: osCalls)
-		self.init(descriptionOrder: domainOrder, configuration: domainConfigurations, osCalls: osCalls)
+	convenience init(configuration: [String: CNConfiguration], osCalls: OSCalls) throws {
+		try self.init(initType: .configuration(configuration: configuration), osCalls: osCalls)
 	}
 
-	convenience init(configuration: [String: CNConfiguration], osCalls: OSCalls) {
-		self.init(descriptionOrder: nil, configuration: configuration, osCalls: osCalls)
-	}
+	init(initType: InitType, osCalls: OSCalls) throws {
+		let configuration: [String: CNConfiguration]
+		let descriptionOrder: [String]?
+		switch initType {
+		case .infoPlist:
+			(descriptionOrder, configuration) = try Self.parseConfigurationDict(osCalls: osCalls)
 
-	init(descriptionOrder: [String]?, configuration: [String: CNConfiguration], osCalls: OSCalls) {
+		case .configuration(descriptionOrder: let passedDescriptionOrder, configuration: let passedConfiguration):
+			// If we get a configuration, test whether ATS is enabled. This same test is
+			// run in parseConfigurationDict(osCalls:) for the no-parameter constructor path.
+			if Self.testForATSPinning(osCalls: osCalls) {
+				throw CNParseError.atsConflict
+			}
+			descriptionOrder = passedDescriptionOrder
+			configuration = passedConfiguration
+		}
+
 		self.osCalls = osCalls
 		self.configuration = configuration
 		self.descriptionOrder = descriptionOrder
 	}
 
+	convenience init(osCalls: OSCalls) throws {
+		try self.init(initType: .infoPlist, osCalls: osCalls)
+	}
+
+	static func testForATSPinning(osCalls: OSCalls) -> Bool {
+		if let plist = osCalls.getInfoDictionary() {
+			// Check to see if ATS has been configured for pinning
+			if let atsConfigurationDict = plist["NSAppTransportSecurity"] as? [String: Any],
+			   atsConfigurationDict["NSPinnedDomains"] as? [String: Any] != nil
+			{
+				return true
+			}
+		}
+		return false
+	}
+
 	static func parseConfigurationDict(osCalls: OSCalls) throws -> ([String], [String: CNConfiguration]) {
-		guard let plist = osCalls.getInfoDictionary() else {
+		guard let plist = osCalls.getInfoDictionary(),
+			  !plist.isEmpty else {
 			throw CNParseError.noInfoPlist
 		}
 		// Check to see if ATS has been configured for pinning
-		if let atsConfigurationDict = plist["NSAppTransportSecurity"] as? [String: Any],
-		   atsConfigurationDict["NSPinnedDomains"] as? [String: Any] != nil
-		{
+		if testForATSPinning(osCalls: osCalls) {
 			throw CNParseError.atsConflict
 		}
 		guard let pinningManagerDict = osCalls.getInfoDictionary()?["CNPinningManager"] as? [String: Any] else {
