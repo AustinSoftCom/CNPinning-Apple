@@ -1,6 +1,8 @@
 // Copyright (c) 2026 AustinSoft.com
 
 import Foundation
+import Synchronization
+@preconcurrency import Security
 
 /**
  The main implementation of CNPinningManager.
@@ -13,6 +15,9 @@ public final class CNPinningManager: Sendable, CustomStringConvertible {
 	let configuration: [String: CNConfiguration]
 	let descriptionOrder: [String]?
 	let osCalls: OSCalls
+	let authenticationHost: String?
+	let policySigningKey: SecKey?
+	let enterpriseConfigurations: Mutex<CNEnterprisePolicy?> = .init(nil)
 
 	enum InitType {
 		case infoPlist
@@ -31,6 +36,32 @@ public final class CNPinningManager: Sendable, CustomStringConvertible {
 	}
 
 	/**
+	 Initialize CNPinningManager from your application's Info.plist with the authenticationHost and policySigningKey
+	 
+	 Initialize CNPinningManager from the `CNPinningManager` entry in the
+	 application's Info.plist, parses it-noting any problems, and then passing the
+	 result to the main init, which will configure CNPinningManager.
+	 - Parameters:
+	 - authenticationHost: The hostname for your authentication-only host
+	 - policySigningKey:  The public key used to validate the additions to your pinning
+	 */
+	public convenience init(authenticationHost: String, policySigningKey: SecKey) throws {
+		try self.init(
+			initType: .infoPlist,
+			authenticationHost: authenticationHost,
+			policySigningKey: policySigningKey,
+			osCalls: OSCalls())
+	}
+
+	convenience init(authenticationHost: String, policySigningKey: SecKey, osCalls: OSCalls) throws {
+		try self.init(
+			initType: .infoPlist,
+			authenticationHost: authenticationHost,
+			policySigningKey: policySigningKey,
+			osCalls: osCalls)
+	}
+
+	/**
 	 Initialize CNPinningManager with the specified configuration
 
 	 Initialize CNPinningManager passing the specified configuration to the
@@ -43,11 +74,40 @@ public final class CNPinningManager: Sendable, CustomStringConvertible {
 		try self.init(initType: .configuration(configuration: configuration), osCalls: OSCalls())
 	}
 
-	convenience init(configuration: [String: CNConfiguration], osCalls: OSCalls) throws {
-		try self.init(initType: .configuration(configuration: configuration), osCalls: osCalls)
+	/**
+	 Initialize CNPinningManager with the specified configuration and enterprise support
+
+	 Initialize CNPinningManager passing the specified configuration to the
+	 main init, which will configure CNPinningManager, and enable enterprise
+	 pinning via ``applyEnterprisePolicy(with:)``.
+
+	 - Parameters:
+	 - authenticationHost: The hostname for your authentication-only host, exempt from enterprise overrides
+	 - policySigningKey: The public key used to validate signed enterprise policies
+	 - configuration: The CNConfiguration to use for this CNPinningManager
+	 */
+	public convenience init(authenticationHost: String, policySigningKey: SecKey, configuration: [String: CNConfiguration]) throws {
+		try self.init(
+			initType: .configuration(configuration: configuration),
+			authenticationHost: authenticationHost,
+			policySigningKey: policySigningKey,
+			osCalls: OSCalls())
 	}
 
-	init(initType: InitType, osCalls: OSCalls) throws {
+	convenience init(authenticationHost: String? = nil, policySigningKey: SecKey? = nil, configuration: [String: CNConfiguration], osCalls: OSCalls) throws {
+		try self.init(
+			initType: .configuration(configuration: configuration),
+			authenticationHost: authenticationHost,
+			policySigningKey: policySigningKey,
+			osCalls: osCalls)
+	}
+
+	init(
+		initType: InitType,
+		authenticationHost: String? = nil,
+		policySigningKey: SecKey? = nil,
+		osCalls: OSCalls
+	) throws {
 		let configuration: [String: CNConfiguration]
 		let descriptionOrder: [String]?
 		switch initType {
@@ -67,10 +127,73 @@ public final class CNPinningManager: Sendable, CustomStringConvertible {
 		self.osCalls = osCalls
 		self.configuration = configuration
 		self.descriptionOrder = descriptionOrder
+		self.authenticationHost = authenticationHost
+		self.policySigningKey = policySigningKey
 	}
 
 	convenience init(osCalls: OSCalls) throws {
 		try self.init(initType: .infoPlist, osCalls: osCalls)
+	}
+	
+	/// Configures enterprise pinning to support the additional pins that an
+	/// enterprise can configure. Only call this after a successful login.
+	///
+	/// - Parameter signedPolicy: The signed JWT enterprise pinning configuration
+	public func applyEnterprisePolicy(with signedPolicy: Data) throws {
+		guard enterpriseConfigurations.withLock({ $0 }) == nil else {
+			throw CNPinningError.existingEnterpriseConfiguration
+		}
+		try applyPolicy(with: signedPolicy)
+	}
+	
+	/// Refreshes enterprise pinning to support the additional pins that an
+	/// enterprise can configure.
+	///
+	/// - Parameter signedPolicy: The signed JWT enterprise pinning configuration
+	public func refreshEnterprisePolicy(with signedPolicy: Data) throws {
+		guard enterpriseConfigurations.withLock({ $0 }) != nil else {
+			throw CNPinningError.missingEnterpriseConfiguration
+		}
+		try applyPolicy(with: signedPolicy)
+	}
+	
+	/// Drops any active enterprise pinning policy, reverting to the app-baked configuration only.
+	///
+	/// Call this on logout. After signing out, ``applyEnterprisePolicy(with:)`` may be called again
+	/// to install a new policy.
+	public func signOut() {
+		enterpriseConfigurations.withLock({ $0 = nil })
+	}
+
+	/// The issue date (the JWT `iat` claim) of the currently-active enterprise policy, or `nil` when
+	/// no policy has been applied.
+	public var enterprisePolicyIssuedAt: Date? {
+		enterpriseConfigurations.withLock { $0?.issuedAt }
+	}
+
+	/// The expiration date (the JWT `exp` claim) of the currently-active enterprise policy, or `nil`
+	/// when no policy has been applied.
+	public var enterprisePolicyExpiry: Date? {
+		enterpriseConfigurations.withLock { $0?.expirationDate }
+	}
+
+	func applyPolicy(with signedPolicy: Data) throws {
+		guard authenticationHost != nil,
+			  let policySigningKey else {
+			throw CNPinningError.enterpriseNotConfigured
+		}
+		
+		let jwt = JWT(from: signedPolicy, verifiedWith: policySigningKey)
+		
+		guard let payloadData = jwt.validatedPayload else {
+			throw CNPinningError.invalidJWSFormat
+		}
+		
+		let policy = try JSONDecoder().decode(CNEnterprisePolicy.self, from: payloadData)
+		
+		self.enterpriseConfigurations.withLock {
+			$0 = policy
+		}
 	}
 
 	static func testForATSPinning(osCalls: OSCalls) -> Bool {
@@ -115,17 +238,48 @@ public final class CNPinningManager: Sendable, CustomStringConvertible {
 		return (domainOrder, domainConfigurations)
 	}
 
-	func getConfiguration(for host: String) -> CNConfiguration? {
+	func getConfiguration(for host: String) -> [any CNPinningMatches] {
+		let baseMatch: CNConfiguration?
 		if let exact = configuration[host] {
-			return exact
+			baseMatch = exact
+		} else {
+			baseMatch = configuration
+				.filter { domain, config in
+					config.includesSubdomains && host.hasSuffix("." + domain)
+				}
+				.max(by: { $0.key.count < $1.key.count })?
+				.value
+		}
+		
+		// If we don't have a baseMatch for the host return an empty array
+		guard let baseMatch else {
+			return []
+		}
+		
+		// baseMatch is now verified, so now we need to determine what to return.
+		// The only special case at this point is if host matches authenticationHost.
+		if let authenticationHost,
+		   host == authenticationHost {
+			return [baseMatch]
+		}
+		
+		// The policy enforces its own [iat, exp) validity window, returning nil when expired or
+		// not yet valid; an ignored policy leaves only the base match.
+		let now = osCalls.getCurrentDate()
+		let enterpriseMatch = enterpriseConfigurations.withLock {
+			$0?.getConfiguration(for: host, at: now)
 		}
 
-		return configuration
-			.filter { domain, config in
-				config.includesSubdomains && host.hasSuffix("." + domain)
-			}
-			.max(by: { $0.key.count < $1.key.count })?
-			.value
+		// At this point, we *might* have an enterprise match and we
+		// do have a base match, so if enterpriseMatch is nil, only baseMatch is returned
+		guard let enterpriseMatch else {
+			return [baseMatch]
+		}
+		
+		switch enterpriseMatch {
+		case .match(let enterpriseConfiguration), .wildcard(let enterpriseConfiguration):
+			return [enterpriseConfiguration, baseMatch]
+		}
 	}
 
 	enum EvaluationResult {
@@ -135,11 +289,12 @@ public final class CNPinningManager: Sendable, CustomStringConvertible {
 	}
 
 	private func evaluate(challenge: URLAuthenticationChallenge) -> EvaluationResult {
-		// Get the configuration for this host, and the certChain from the challenge
-		guard let configuration = getConfiguration(for: challenge.protectionSpace.host) else {
+		// If there were no configurations to pin, this host isn't pinned.
+		let configurations = getConfiguration(for: challenge.protectionSpace.host)
+		if configurations.isEmpty {
 			return .notPinned
 		}
-
+		
 		// Check to see if we can even pin the host, if not then we should just reject
 		// the connection-that's the "fail-secure" response.
 		guard let trustWrapper = osCalls.getServerTrust(challenge),
@@ -147,22 +302,25 @@ public final class CNPinningManager: Sendable, CustomStringConvertible {
 		else {
 			return .reject
 		}
-
+		
 		// Build the list of commonNames of the certificates
 		let commonNames: [String] = certChain.compactMap(osCalls.getCommonName)
-
+		
 		// Make sure we got all of the names for all of the certs, otherwise we can't check
 		// we should "fail-secure."
 		guard commonNames.count == certChain.count else {
 			return .reject
 		}
-
-		// Did the commonName match a chain in this configuration? If so, then the pin
-		// was successful.
-		if configuration.matches(commonNames) {
-			return .proceed
+		
+		// Get the configuration for this host, and the certChain from the challenge
+		for configuration in configurations {
+			// Did the commonName match a chain in this configuration? If so, then the pin
+			// was successful.
+			if configuration.matches(commonNames) {
+				return .proceed
+			}
 		}
-
+		
 		// The pin didn't match, so we need to fail the connection.
 		return .reject
 	}

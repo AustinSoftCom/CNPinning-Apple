@@ -81,3 +81,52 @@ public struct CNChainLink: Hashable, Equatable, Sendable, CustomStringConvertibl
 		"CNChainLink(.\(linkType.rawValue), \"\(value)\")"
 	}
 }
+
+extension CNChainLink.LinkType: Codable, CaseIterable {
+	public init(from decoder: Decoder) throws {
+		let container = try decoder.singleValueContainer()
+		let linkType = try container.decode(String.self)
+		for acceptableType in Self.allCases {
+			if acceptableType.rawValue == linkType {
+				self = acceptableType
+				return
+			}
+		}
+		throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Invalid link type: \(linkType)"))
+	}
+	
+	public func encode(to encoder: Encoder) throws {
+		var container = encoder.singleValueContainer()
+		try container.encode(rawValue)
+	}
+}
+
+extension CNChainLink: Codable {
+	enum CodingKeys: String, CodingKey {
+		case linkType = "type"
+		case value
+	}
+	
+	public init(from decoder: Decoder) throws {
+		let container = try decoder.container(keyedBy: CodingKeys.self)
+		self.value = try container.decode(String.self, forKey: .value)
+		
+		if container.contains(.linkType) {
+			self.linkType = try container.decode(CNChainLink.LinkType.self, forKey: .linkType)
+		} else {
+#if DEBUG
+			FileHandle.standardError.write(Data("CNChainLink: missing type for \(value), defaulting to .exact\n".utf8))
+#endif
+			linkType = .exact
+		}
+		if value.isEmpty {
+			throw CNParseError.missingValue("\(linkType.rawValue) value")
+		}
+	}
+	
+	public func encode(to encoder: Encoder) throws {
+		var container = encoder.container(keyedBy: CodingKeys.self)
+		try container.encode(linkType, forKey: .linkType)
+		try container.encode(value, forKey: .value)
+	}
+}

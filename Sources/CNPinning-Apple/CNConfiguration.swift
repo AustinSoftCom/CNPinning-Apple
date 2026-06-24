@@ -5,7 +5,7 @@ import Foundation
 /**
  The configuration for pinning for a host or subdomain..
  */
-public struct CNConfiguration: Equatable, Sendable, CustomStringConvertible {
+public struct CNConfiguration: Equatable, Sendable, CustomStringConvertible, CNPinningMatches {
     let includesSubdomains: Bool
     let chainSet: [CNChain]
 	

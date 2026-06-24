@@ -8,7 +8,6 @@ import Foundation
 public struct CNChain: Hashable, Sendable, CustomStringConvertible {
     let links: [CNChainLink]
 
-
 	/**
 	 The chain of links used to validate a connection.
 	- Parameter chain: A chain of links for validating the connection
@@ -43,5 +42,17 @@ public struct CNChain: Hashable, Sendable, CustomStringConvertible {
 	public var description: String {
 		// Display chains as entered, not as stored
 		"CNChain([\(links.reversed().map(\.self.description).joined(separator: ", "))])"
+	}
+}
+
+extension CNChain: Codable {
+	public init(from decoder: any Decoder) throws {
+		let container = try decoder.singleValueContainer()
+		self.links = try container.decode([CNChainLink].self).reversed()
+	}
+	
+	public func encode(to encoder: any Encoder) throws {
+		var container = encoder.singleValueContainer()
+		try container.encode(links.reversed())
 	}
 }

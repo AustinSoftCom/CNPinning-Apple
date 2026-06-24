@@ -34,6 +34,7 @@ anything it cannot verify *for the specified configuration* is rejected.
 - [Subdomain handling](#subdomain-handling)
 - [Validation behavior](#validation-behavior)
 - [Async/await API](#asyncawait-api)
+- [Enterprise pinning](#enterprise-pinning)
 - [Errors](#errors)
 - [Security notes](#security-notes)
 - [Testing](#testing)
@@ -548,6 +549,67 @@ do {
 
 ---
 
+## Enterprise pinning
+
+An enterprise can extend an app's pinning at runtime with a **signed policy**, without an app
+update — useful when a managed device must trust a corporate TLS-inspection chain. Build the manager
+with an `authenticationHost` (the login host, exempt from enterprise overrides so a policy fetched
+from it can never re-pin it) and a `policySigningKey` (the `SecKey` public key every policy must
+verify against):
+
+```swift
+import CNPinning_Apple
+
+// From Info.plist:
+let manager = try CNPinningManager(
+    authenticationHost: "auth.example.com",
+    policySigningKey: enterprisePublicKey   // a SecKey
+)
+
+// …or with a programmatic configuration:
+let manager = try CNPinningManager(
+    authenticationHost: "auth.example.com",
+    policySigningKey: enterprisePublicKey,
+    configuration: [ /* app-baked pins */ ]
+)
+```
+
+After a successful login, hand the manager the signed policy you fetched (the raw JWS bytes):
+
+```swift
+try manager.applyEnterprisePolicy(with: signedPolicy)   // first time (throws if one is already active)
+try manager.refreshEnterprisePolicy(with: signedPolicy) // replace an active policy
+manager.signOut()                                       // drop the policy (e.g. on logout)
+```
+
+An applied policy contributes its mappings only while the current time is within its `iat`/`exp`
+window; once expired (or not yet valid) it is ignored during evaluation, falling back to the
+app-baked pins. The active policy's window is available via `manager.enterprisePolicyIssuedAt` and
+`manager.enterprisePolicyExpiry` (both `Date?`, `nil` when no policy is applied).
+
+The policy is a **JWS** (RS256/384/512, ES256/384/512, or PS256/384/512) whose verified payload is
+JSON: an `iat`/`exp` pair plus one entry per host (or the `"*"` wildcard), each an array of chains in
+the same root-to-leaf shape used elsewhere. `iat`/`exp` are JWT `NumericDate` claims — **seconds
+since the Unix epoch** (RFC 7519):
+
+```json
+{
+  "iat": 1718000000,
+  "exp": 1718600000,
+  "*": [
+    [ { "type": "exact",  "value": "Enterprise Root CA" },
+      { "type": "suffix", "value": ".example.com" } ]
+  ]
+}
+```
+
+When a host is pinned, an enterprise configuration (an exact host match, else the `"*"` wildcard) is
+tried **before** the app-baked configuration, so either an app chain *or* an enterprise chain may
+satisfy the pin. Verification uses `SecKeyVerifySignature`; ECDSA signatures use the ASN.1/DER (X9.62)
+encoding, which matches CNPinning-Android, so one signed policy verifies on both platforms.
+
+---
+
 ## Errors
 
 ### `CNParseError` — thrown while building a configuration
@@ -562,11 +624,15 @@ do {
 | `noChainsDefined` | A configuration's `chainSet` is empty. |
 | `duplicateChain(Int)` | The same chain appears twice in a `chainSet` (index of the duplicate). |
 
-### `CNPinningError` — thrown during async validation
+### `CNPinningError` — thrown during async validation and enterprise policy application
 
 | Case | Cause |
 |------|-------|
 | `notPinned` | The challenged host has no matching pinned configuration. |
+| `enterpriseNotConfigured` | `applyEnterprisePolicy`/`refreshEnterprisePolicy` was called on a manager built without an `authenticationHost` and `policySigningKey`. |
+| `existingEnterpriseConfiguration` | `applyEnterprisePolicy` was called while a policy is already active — call `signOut()` first, or use `refreshEnterprisePolicy`. |
+| `missingEnterpriseConfiguration` | `refreshEnterprisePolicy` was called before any policy was applied. |
+| `invalidJWSFormat` | The signed policy is not a valid JWS, or its signature does not verify against the `policySigningKey`. |
 
 ---
 
