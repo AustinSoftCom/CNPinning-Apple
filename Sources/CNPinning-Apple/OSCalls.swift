@@ -52,14 +52,21 @@ struct OSCalls {
     let getCertificateChain: @Sendable (CNSecTrust) -> [CNSecCertificate]?
     let getCommonName: @Sendable (CNSecCertificate) -> String?
 
+    /// The current wall-clock time, used to enforce an enterprise policy's validity window
+    /// (`iat`/`exp`) when retrieving its mappings. Defaults to `Date()`; tests inject a fixed date
+    /// to drive the expired / not-yet-valid paths deterministically.
+    let getCurrentDate: @Sendable () -> Date
+
     /// This allows you to check parameters and drive the responses from the OS calls..
     init(
         getInfoDictionary: (@Sendable () -> [String: Any]?)? = nil,
         getServerTrust: (@Sendable (URLAuthenticationChallenge) -> CNSecTrust?)? = nil,
         getCertificateChain: (@Sendable (CNSecTrust) -> [CNSecCertificate]?)? = nil,
-        getCommonName: (@Sendable (CNSecCertificate) -> String?)? = nil
+        getCommonName: (@Sendable (CNSecCertificate) -> String?)? = nil,
+        getCurrentDate: (@Sendable () -> Date)? = nil
     ) {
         self.getInfoDictionary = getInfoDictionary ?? { Bundle.main.infoDictionary }
+        self.getCurrentDate = getCurrentDate ?? { Date() }
         self.getServerTrust = getServerTrust ?? { RealCNSecTrust(trust: $0.protectionSpace.serverTrust) }
         self.getCertificateChain = getCertificateChain ?? {
             guard let trust = ($0 as? RealCNSecTrust<SecTrust>)?.trust else { return nil }

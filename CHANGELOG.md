@@ -9,15 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Nothing yet
+- Enterprise pinning support. A `CNPinningManager` constructed with an `authenticationHost` and a
+  `policySigningKey` (a `SecKey`) can apply a signed enterprise pinning policy at runtime via
+  `applyEnterprisePolicy(with:)`, replace it with `refreshEnterprisePolicy(with:)`, and drop it with
+  `signOut()`. Enterprise-supplied chains are tried before the app-baked configuration; the
+  `authenticationHost` is exempt from enterprise overrides, and `CNEnterprisePolicy` enforces its own
+  `iat`/`exp` validity window, contributing its mappings only while valid (an expired or
+  not-yet-valid policy is ignored). The active policy's `iat`/`exp` are exposed via
+  `enterprisePolicyIssuedAt` and `enterprisePolicyExpiry`.
+- `CNEnterpriseConfiguration` and `CNEnterprisePolicy` types describing an enterprise policy, plus
+  the `CNPinningMatches` protocol adopted by both `CNConfiguration` and `CNEnterpriseConfiguration`.
+- JWS verification of signed policies (`JWT`/`JWTHeader`) via `SecKeyVerifySignature`, supporting the
+  RS256/384/512, ES256/384/512, and PS256/384/512 algorithms.
+- New `CNPinningError` cases: `enterpriseNotConfigured`, `existingEnterpriseConfiguration`,
+  `missingEnterpriseConfiguration`, and `invalidJWSFormat`.
+- `Codable` conformances for `CNChain` and `CNChainLink`.
 
 ### Fixed
 
-- Nothing yet
+- Enterprise policy `iat`/`exp` are now decoded and encoded as JWT `NumericDate` values (seconds
+  since the Unix epoch, RFC 7519) instead of `Foundation`'s default `Date` encoding (seconds since
+  the 2001 reference date), so signed policies interoperate with standard JWT issuers and with
+  CNPinning-Android.
 
 ### Changed
 
-- Nothing yet
+- `getConfiguration(for:)` now returns an ordered `[any CNPinningMatches]` (the enterprise
+  configuration, when present, followed by the app-baked configuration) instead of a single optional
+  `CNConfiguration`; an empty array means the host is not pinned.
 
 ### Removed
 

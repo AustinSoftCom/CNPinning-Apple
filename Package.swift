@@ -6,11 +6,11 @@ import PackageDescription
 let package = Package(
     name: "CNPinning-Apple",
     platforms: [
-        .macOS(.v12),
-        .iOS(.v15),
-        .tvOS(.v15),
-        .watchOS(.v8),
-        .visionOS(.v1),
+        .macOS(.v15),
+        .iOS(.v18),
+        .tvOS(.v18),
+        .watchOS(.v11),
+        .visionOS(.v2),
     ],
     products: [
         .library(
