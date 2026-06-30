@@ -1,6 +1,11 @@
 # CNPinning-Apple
-
 Certificate **Common Name (CN) pinning** for Apple platforms.
+
+[![Swift](https://img.shields.io/badge/Swift-6.3-orange?style=flat-square)](https://img.shields.io/badge/Swift-6.3-orange?style=flat-square)
+[![Platforms](https://img.shields.io/badge/Platforms-macOS_iOS_tvOS_watchOS_visionOS-yellowgreen?style=flat-square)](https://img.shields.io/badge/Platforms-macOS_iOS_tvOS_watchOS_visionOS_Android_JVM-yellowgreen?style=flat-square)
+[![Swift Package Manager](https://img.shields.io/badge/Swift_Package_Manager-compatible-orange?style=flat-square)](https://img.shields.io/badge/Swift_Package_Manager-compatible-Orange?style=flat-square)
+
+> Looking for the Android version? See [CNPinning-Android](https://github.com/AustinSoftCom/CNPinning-Android)
 
 `CNPinning-Apple` lets a `URLSession` reject TLS connections unless the server's
 certificate chain presents the Common Names you expect. Instead of pinning a
